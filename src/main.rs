@@ -5,6 +5,7 @@ use std::io;
 use crate::tokenizer::tokenize;
 
 mod tokenizer;
+mod parser;
 
 fn main() -> io::Result<()> {
     let file_name = args().nth(1).unwrap();
