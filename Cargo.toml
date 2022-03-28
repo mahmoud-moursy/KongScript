@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 rust_decimal = "1.22.0"
+chumsky = "0.8.0"

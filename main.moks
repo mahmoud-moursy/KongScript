@@ -1,5 +1,5 @@
-let value = 0
+let array = [1 2 3 4]
 
-if value matches 0.1..10 {
-    console.log("Hi!")
-}
+array.push(5)
+
+console.log(array:4)
