@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Pointer};
 use std::str::FromStr;
 
 use rust_decimal::Decimal;
@@ -100,6 +100,67 @@ impl Display for Math {
 	}
 }
 
+impl Display for Token {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Token::Keyword(kw) => {
+				kw.fmt(f)
+			}
+			Token::Math(m) => {
+				Display::fmt(m, f)
+			}
+			Token::Equals => {
+				write!(f, "=")
+			}
+			Token::DotAccessor => {
+				write!(f, ".")
+			}
+			Token::AnonymousArrow => {
+				write!(f, "->")
+			}
+			Token::Colon => {
+				write!(f, ":")
+			}
+			Token::MacroInvocation => {
+				write!(f, "!")
+			}
+			Token::MacroVariable => {
+				write!(f, "$")
+			}
+			Token::Ident(id) => {
+				Display::fmt(id, f)
+			}
+			Token::Str(str) => {
+				Debug::fmt(str, f)
+			}
+			Token::Bool(b) => {
+				Display::fmt(b, f)
+			}
+			Token::Num(n) => {
+				Display::fmt(n, f)
+			}
+			Token::Group(g) => {
+				write!(f,
+					   "{}",
+					   g.iter().map(|e| e.to_string()).collect::<Vec<String>>().join(","),
+				)
+			}
+			Token::Array(g) => {
+				write!(f,
+					   "{}",
+					   g.iter().map(|e| e.to_string()).collect::<Vec<String>>().join(","),
+				)
+			}
+			Token::Block(g) => {
+				write!(f,
+					   "{}",
+					   g.iter().map(|e| e.to_string()).collect::<Vec<String>>().join(";"),
+				)
+			}
+		}
+	}
+}
+
 // I know this is a terrible idea. But it's just more convenient!
 #[allow(non_snake_case)]
 pub mod BlockType {
@@ -154,21 +215,27 @@ pub mod combinators {
 			).then(var())
 			.map(
 				|((lhs, _), rhs)| {
-					match (lhs.clone(), rhs.clone()) {
-						(
-							_,
-							Node::RegexString(_, _)
-						) => Node::Compiled(format!("{rhs}.test({lhs})")),
-						(
-							Node::Num(_),
-							Node::Range(
-								..
-							)
-						) => Node::Compiled(format!("{lhs} in {rhs}")),
-						(_, _) => Node::Compiled(format!("{rhs} == {lhs}"))
-					}
+					compile_match(lhs, rhs)
 				}
 			)
+	}
+
+	pub fn compile_match(lhs: Node, rhs: Node) -> Node {
+		match (lhs.clone(), rhs.clone()) {
+			(
+				_,
+				Node::RegexString(_, _)
+			) => Node::Compiled(format!("{rhs}.test({lhs})")),
+			(
+				_,
+				Node::Range(
+					..
+				)
+			) => Node::Compiled(format!("{lhs} in {rhs}")),
+			(lhs, rhs) => {
+				Node::Compiled(format!("{rhs} == {lhs}"))
+			}
+		}
 	}
 
 	pub fn class_match() -> impl Parser<Token, Node, Error=Simple<Token>> {
@@ -512,27 +579,37 @@ pub fn tokenize(file: String) -> Vec<Token> {
 					'{' => BlockType::Block,
 					_ => unreachable!()
 				};
-				
+
 				let mut src = String::new();
-				
+
 				let mut bracket_count: usize = 1;
-				
+
+				let mut in_string = false;
+
 				while bracket_count != 0 {
 					let char = file.next().unwrap();
-					
+
+					if char == '"' || char == '\'' {
+						in_string = !in_string;
+					}
+
 					if char == brackets[1] {
-						bracket_count -= 1;
-						
+						if !in_string {
+							bracket_count -= 1;
+						}
+
 						if bracket_count != 0 {
 							src.push(char);
 						}
-						
+
 						continue
 					} else if char == brackets[0] {
-						bracket_count += 1;
-						
+						if !in_string {
+							bracket_count += 1;
+						}
+
 						src.push(char);
-						
+
 						continue
 					}
 					

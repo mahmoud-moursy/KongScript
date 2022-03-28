@@ -2,8 +2,10 @@
 
 ## A JavaScript preprocessor with fancier syntax.
 
-- P.S: MonkeyScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to 
-run your output through Babel or a similar preprocessor!
+- P.S: MonkeyScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to
+  run your output through Babel or a similar preprocessor!
+- Contributors: Please avoid attempting to contribute. Your mind will not make it out of the codebase in one piece. You
+  can _try_. You will fail.
 
 ### You Should Know:
 
@@ -11,10 +13,19 @@ run your output through Babel or a similar preprocessor!
 - The file extension is `.moks`
 - The compiler does **NOT** preserve comments.
   - In the examples, the comments are added-in
-- **Some examples are not MonkeyScript output (because they haven't been implemented), or are
-  modified examples.**
-- The code output is automatically minified; in examples where it *is* MonkeyScript out, the code has been
-  prettified for your enjoyment.
+- **Some examples are not MonkeyScript output (because they haven't been implemented), or are modified examples.**
+- The code output is automatically minified; in examples where it *is* MonkeyScript out, the code has been prettified
+  for your enjoyment.
+
+### TODOs:
+
+- Strict equality operators (`is`, `isnt`) (`matches` acts as a loose equality (`==`) operator, except for regexes and
+  arrays)
+- `and` operator
+- Negators (`not`)
+- Imports & Exports
+- Macros (Still in concept stage)
+- Objects (We have enough of those in JS, you guys will be alright...)
 
 ### Syntactic sugar by example
 
@@ -129,8 +140,8 @@ let array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 ```
 let array = 1..21;
 
-// 10 through 20.
-let array_slice = array[9..21];
+// 10 through 20. Index with :
+let array_slice = array:9..21;
 
 console.log(array_slice)
 ```
@@ -240,12 +251,9 @@ class OtherClass {
 let cool_class = new OtherClass(30);
 
 // So far, this is as far as one can go
-// with pattern matching.
+// with pattern matching. This is a fancy
+// instanceof.
 if cool_class matches MyClass {
-  // I don't think I will add 'modern'
-  // pattern-matching syntax any time
-  // soon. Maybe someone else can
-  // rise to the occasion?
   console.log(cool_class.value)
 } elif cool_class matches OtherClass {
   console.log(cool_class.other_value)

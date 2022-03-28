@@ -1,5 +1,7 @@
-let array = [1 2 3 4]
+let value = "abc"
 
-array.push(5)
-
-console.log(array:4)
+if value matches r"[a-zA-Z0-9]+" {
+    console.log("It works!!")
+} else {
+    console.log("It does not work :(")
+}

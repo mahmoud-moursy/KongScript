@@ -9,7 +9,7 @@ use Node::*;
 use crate::tokenizer::{Keyword, Math, Token};
 use crate::tokenizer::combinators::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
 	Add(Box<Node>, Box<Node>),
 	Sub(Box<Node>, Box<Node>),
@@ -46,19 +46,28 @@ pub enum Node {
 	},
 	If {
 		condition: Box<Node>,
-		code: Box<Node>,
+		code: Vec<Node>,
+	},
+	Elif {
+		condition: Box<Node>,
+		code: Vec<Node>,
+	},
+	Else {
+		code: Vec<Node>,
 	},
 	While {
 		condition: Box<Node>,
-		code: Box<Node>,
+		code: Vec<Node>,
 	},
 	FunctionDecl {
 		name: String,
 		args: Vec<String>,
 		body: Vec<Node>,
 	},
+	Object(Vec<(Node, Node)>),
 	AnonymousArrow,
 	Compiled(String),
+	Stray(Token)
 }
 
 impl Display for Node {
@@ -86,7 +95,7 @@ impl Display for Node {
 			Node::Num(n) => write!(f, "{n}"),
 			Node::Var(v) => write!(f, "{v}"),
 			Node::Return(out) => write!(f, "return {out};"),
-			RegexString(pat, args) => write!(f, "new RegExp({pat:?},{args})"),
+			RegexString(pat, args) => write!(f, "new RegExp({pat:?},{args:?})"),
 			Node::Let {
 				name,
 				value
@@ -112,11 +121,22 @@ impl Display for Node {
 			Node::If {
 				condition,
 				code
-			} => write!(f, "if({condition}){code}"),
+			} => write!(f, "if({condition}){}", Node::Block(code.clone())),
+			Node::Elif {
+				condition,
+				code
+			} => {
+				write!(f, "else if({condition}){}", Node::Block(code.clone()))
+			}
+			Node::Else {
+				code
+			} => {
+				write!(f, "else {}", Node::Block(code.clone()))
+			}
 			Node::While {
 				condition,
 				code
-			} => write!(f, "while({condition}){code}"),
+			} => write!(f, "while({condition}){}", Node::Block(code.clone())),
 			Node::MathEq {
 				name,
 				op,
@@ -140,7 +160,9 @@ impl Display for Node {
 			} => write!(
 				f, "function {name}({}){{{}}};", args.join(","), body.iter().map(|e| e.to_string()).collect::<Vec<String>>().join("")
 			),
-			Node::Compiled(any) => write!(f, "{any}")
+
+			Node::Compiled(any) => write!(f, "{any}"),
+			Node::Stray(tok) => write!(f, "{tok}")
 		}
 	}
 }
@@ -166,14 +188,27 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 		let r#let =
 			keyword(Keyword::Let)
 				.then(ident())
+				.then(
+					token(Token::Colon).then(var()).or_not().ignored()
+				)
 				.then(token(Token::Equals))
 				.then(expr.clone())
-				.map(|(((_, name), _), value)| {
+				.map(|((((_, name), _), _), value)| {
 					Node::Let {
 						name,
 						value: box value,
 					}
 				});
+
+		let math = var().then(
+			math_symbol()
+		).then(
+			expr.clone()
+		).map(
+			|((lhs, op), rhs)| {
+				op.apply(lhs, rhs)
+			}
+		);
 
 		let math_eq = (ident())
 			.then(math_symbol())
@@ -196,7 +231,17 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			.map(|((_, condition), code)| {
 				Node::If {
 					condition: box condition,
-					code: box Node::Block(code),
+					code: code,
+				}
+			});
+
+		let elif = keyword(Keyword::Elif)
+			.then(expr.clone())
+			.then(block())
+			.map(|((_, condition), code)| {
+				Node::Elif {
+					condition: box condition,
+					code: code,
 				}
 			});
 
@@ -206,7 +251,7 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			.map(|((_, condition), code)| {
 				Node::While {
 					condition: box condition,
-					code: box Node::Block(code),
+					code: code,
 				}
 			});
 
@@ -250,8 +295,11 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 		let fun = keyword(Keyword::Fun)
 			.then(ident())
 			.then(group())
+			.then(
+				token(Token::Colon).then(ident()).or_not().ignored()
+			)
 			.then(block())
-			.map(|(((_, name), args), body)| {
+			.map(|((((_, name), args), _), body)| {
 				Node::FunctionDecl {
 					name,
 					args: args.into_iter().map(
@@ -276,20 +324,67 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			}
 		);
 
+		let match_stmt = keyword(Keyword::Match)
+			.then(expr.clone())
+			.then(
+				block()
+			).map(
+			|((_, expr), block)| {
+				let mut block = block.into_iter();
+
+				let mut final_out = String::new();
+
+				while let Some(node) = block.next() {
+					let Some(Node::Block(to_eval)) = block.next() else {
+						panic!("Unexpected token in match statement!")
+					};
+
+					if Node::Var("default".into()) == node {
+						final_out.extend(
+							format!("default:{}", Node::Block(to_eval)).chars()
+						);
+
+						continue;
+					}
+
+					let compiled = compile_match(expr.clone(), node);
+
+					final_out.extend(
+						format!("case {compiled}:{};break;", Node::Block(to_eval)).chars()
+					)
+				}
+
+				Node::Compiled(format!("switch(true) {{{final_out}}}"))
+			}
+		);
+
+		let r#else = keyword(Keyword::Else)
+			.then(block())
+			.map(|(_, code)| {
+				Node::Else {
+					code
+				}
+			});
+
 		r#return
 			.or(r#let)
 			.or(assign)
 			.or(math_eq)
+			.or(math)
 			.or(double_idx)
 			.or(array_idx)
 			.or(class_match())
 			.or(matchers())
+			.or(match_stmt)
+			.or(r#else)
+			.or(elif)
 			.or(r#if)
 			.or(r#while)
 			.or(anon_fun)
 			.or(fun)
 			.or(var())
 			.or(token(Token::AnonymousArrow).to(Node::AnonymousArrow))
+			.or(any().map(Node::Stray))
 	})
 		.repeated()
 		.then_ignore(end())
