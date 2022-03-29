@@ -19,11 +19,7 @@
 
 ### TODOs:
 
-- Strict equality operators (`is`, `isnt`) (`matches` acts as a loose equality (`==`) operator, except for regexes and
-  arrays)
 - `and` operator
-- Classes
-- Negators (`not`)
 - Imports & Exports
 - Macros (Still in concept stage)
 - Throwing
