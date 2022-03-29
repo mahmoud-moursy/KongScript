@@ -1,7 +1,0 @@
-let value = "abc"
-
-if value matches r"[a-zA-Z0-9]+" {
-    console.log("It works!!")
-} else {
-    console.log("It does not work :(")
-}

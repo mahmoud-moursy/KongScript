@@ -1,31 +1,35 @@
-# MonkeyScript
+# KongScript
 
 ## A JavaScript preprocessor with fancier syntax.
 
-- P.S: MonkeyScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to
+- P.S: KongScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to
   run your output through Babel or a similar preprocessor!
-- Contributors: Please avoid attempting to contribute. Your mind will not make it out of the codebase in one piece. You
-  can _try_. You will fail.
+- Contributors: While I appreciate it, for the sake of your mental health and sanity, please avoid attempting to
+  contribute. Your mind will not make it out of the codebase in one piece. You can _try_. You will fail.
 
 ### You Should Know:
 
 - Everything is in the ***CONCEPT*** stage. Some features may be unimplemented!
-- The file extension is `.moks`
+- The file extension is `.kong`
 - The compiler does **NOT** preserve comments.
   - In the examples, the comments are added-in
-- **Some examples are not MonkeyScript output (because they haven't been implemented), or are modified examples.**
-- The code output is automatically minified; in examples where it *is* MonkeyScript out, the code has been prettified
-  for your enjoyment.
+- **Some examples are not KongScript output (because they haven't been implemented), or are modified examples.**
+- The code output is automatically minified; in examples where it *is* KongScript out, the code has been prettified for
+  your enjoyment.
 
 ### TODOs:
 
 - Strict equality operators (`is`, `isnt`) (`matches` acts as a loose equality (`==`) operator, except for regexes and
   arrays)
 - `and` operator
+- Classes
 - Negators (`not`)
 - Imports & Exports
 - Macros (Still in concept stage)
-- Objects (We have enough of those in JS, you guys will be alright...)
+- Throwing
+- Try/Catch
+- Format strings
+- Other JS features that I forgot about
 
 ### Syntactic sugar by example
 
@@ -131,7 +135,7 @@ let array = 1..11;
 // The human way of doing things (Useful if you want to generate a hundred or so.)
 let array = [...Array(10).keys().map(i => i + 1)];
 
-// MonkeyScript compile-time output
+// KongScript compile-time output
 let array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 ```
 

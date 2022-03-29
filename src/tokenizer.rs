@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display, Formatter, Pointer};
+use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
 use rust_decimal::Decimal;
@@ -34,6 +34,39 @@ pub enum Keyword {
 	For,
 	While,
 	Return,
+}
+
+impl Display for Keyword {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", match self {
+			Keyword::Let => { "let" }
+			Keyword::Const => { "const" }
+			Keyword::Fun => { "function" }
+			Keyword::Class => { "class" }
+			Keyword::Get => { "get" }
+			Keyword::Set => { "set" }
+			Keyword::Obj => { "" }
+			Keyword::Drop => { "delete" }
+			Keyword::Throw => { "throw" }
+			Keyword::Match => { "switch" }
+			Keyword::Matches => { "==" }
+			Keyword::New => { "new" }
+			Keyword::Import => { "import" }
+			Keyword::Export => { "export" }
+			Keyword::Include => { "include" }
+			Keyword::Is => { "===" }
+			Keyword::Isnt => { "!==" }
+			Keyword::And => { "&&" }
+			Keyword::Or => { "||" }
+			Keyword::Not => { "!" }
+			Keyword::If => { "if" }
+			Keyword::Else => { "else" }
+			Keyword::Elif => { "else if" }
+			Keyword::For => { "for" }
+			Keyword::While => { "while" }
+			Keyword::Return => { "return" }
+		})
+	}
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -104,7 +137,7 @@ impl Display for Token {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Token::Keyword(kw) => {
-				kw.fmt(f)
+				Display::fmt(kw, f)
 			}
 			Token::Math(m) => {
 				Display::fmt(m, f)
@@ -419,8 +452,8 @@ pub fn tokenize(file: String) -> Vec<Token> {
 			}
 			'a'..='z' | 'A'..='Z' | '_' => {
 				let mut ident = String::from(char);
-				
-				while let Some('a'..='z' | 'A'..='Z' | '_') = file.peek() {
+
+				while let Some('a'..='z' | 'A'..='Z' | '_' | '0'..='9') = file.peek() {
 					ident.push(file.next().unwrap());
 				}
 				
@@ -556,10 +589,14 @@ pub fn tokenize(file: String) -> Vec<Token> {
 					}
 					num.push(file.next().unwrap());
 				}
-				
+
 				final_out.push(
 					Token::Num(Decimal::from_str(&num).unwrap())
 				);
+			}
+			'@' => {
+				final_out.push(Token::Ident("this".into()));
+				final_out.push(Token::DotAccessor);
 			}
 			'.' => if let Some('.') = file.peek() {
 				file.next();
@@ -568,9 +605,9 @@ pub fn tokenize(file: String) -> Vec<Token> {
 				final_out.push(Token::DotAccessor);
 			},
 			':' => {
-			  final_out.push(Token::Colon)
+				final_out.push(Token::Colon)
 			}
-		  	'!' => final_out.push(Token::MacroInvocation),
+			'!' => final_out.push(Token::MacroInvocation),
 		  	'$' => final_out.push(Token::MacroVariable),
 		  	bracket @ '[' | bracket @ '(' | bracket @ '{' => {
 				let brackets = match bracket {
@@ -591,6 +628,11 @@ pub fn tokenize(file: String) -> Vec<Token> {
 
 					if char == '"' || char == '\'' {
 						in_string = !in_string;
+					}
+
+					if char == '\\' && in_string {
+						src.push(char);
+						src.push(file.next().unwrap());
 					}
 
 					if char == brackets[1] {

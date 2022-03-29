@@ -32,15 +32,16 @@ pub enum Node {
 	Bool(bool),
 	RegexString(String, String),
 	Let {
-		name: String,
+		keyword: Keyword,
+		name: Box<Node>,
 		value: Box<Node>,
 	},
 	Assign {
-		name: String,
+		name: Box<Node>,
 		value: Box<Node>,
 	},
 	MathEq {
-		name: String,
+		name: Box<Node>,
 		op: Math,
 		value: Box<Node>,
 	},
@@ -91,16 +92,17 @@ impl Display for Node {
 			Range(
 				box lhs,
 				box rhs
-			) => write!(f, "Array.from({{{rhs}-{lhs}}},(_,i)=>{lhs}+i);"),
+			) => write!(f, "Array.from({{{rhs}-{lhs}}},(_,i)=>{lhs}+i)"),
 			Node::Num(n) => write!(f, "{n}"),
 			Node::Var(v) => write!(f, "{v}"),
 			Node::Return(out) => write!(f, "return {out};"),
 			RegexString(pat, args) => write!(f, "new RegExp({pat:?},{args:?})"),
 			Node::Let {
 				name,
-				value
+				value,
+				keyword
 			} => {
-				write!(f, "let {name}={value};")
+				write!(f, "{keyword} {name}={value};")
 			}
 			Node::Assign {
 				name,
@@ -146,7 +148,7 @@ impl Display for Node {
 					Math::Root | Math::Range => {
 						write!(f, "{}", Node::Assign {
 							name: name.clone(),
-							value: box op.apply(Node::Var(name.clone()), *value.clone()),
+							value: box op.apply(*name.clone(), *value.clone()),
 						})
 					}
 					_ => write!(f, "{name}{op}={value};")
@@ -160,9 +162,16 @@ impl Display for Node {
 			} => write!(
 				f, "function {name}({}){{{}}};", args.join(","), body.iter().map(|e| e.to_string()).collect::<Vec<String>>().join("")
 			),
-
+			Node::Object(pairs) => {
+				write!(f, "{{{}}}", pairs
+					.iter()
+					.map(|(key, value)| format!("{key}:{value}"))
+					.collect::<Vec<String>>()
+					.join(",")
+				)
+			}
 			Node::Compiled(any) => write!(f, "{any}"),
-			Node::Stray(tok) => write!(f, "{tok}")
+			Node::Stray(tok) => write!(f, "{tok} ")
 		}
 	}
 }
@@ -175,27 +184,33 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			.map(|(_, e)| Node::Return(box e));
 
 		let assign =
-			ident()
+			var()
 				.then(token(Token::Equals))
 				.then(expr.clone())
 				.map(|((name, _), value)| {
 					Node::Assign {
-						name,
+						name: box name,
 						value: box value,
 					}
 				});
 
 		let r#let =
 			keyword(Keyword::Let)
-				.then(ident())
+				.or(keyword(Keyword::Const))
+				.then(var())
 				.then(
 					token(Token::Colon).then(var()).or_not().ignored()
 				)
 				.then(token(Token::Equals))
 				.then(expr.clone())
-				.map(|((((_, name), _), _), value)| {
+				.map(|((((keyword, name), _), _), value)| {
+					let Token::Keyword(keyword) = keyword else {
+						unreachable!()
+					};
+
 					Node::Let {
-						name,
+						keyword,
+						name: box name,
 						value: box value,
 					}
 				});
@@ -210,18 +225,52 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			}
 		);
 
-		let math_eq = (ident())
+		let object = keyword(Keyword::Obj).then(
+			block()
+		).map(
+			|(_, objects)| {
+				let mut final_out = vec![];
+
+				for object in objects {
+					let Node::Assign {
+						name,
+						value
+					} = object else {
+						panic!("Unexpected token inside of object!")
+					};
+
+					final_out.push((*name, *value))
+				}
+
+				Node::Object(final_out)
+			}
+		);
+
+		let math_eq = (var())
 			.then(math_symbol())
 			.then(token(Token::Equals))
 			.then(expr.clone())
 			.map(
 				|(((lhs, op), _), rhs)| {
 					Node::MathEq {
-						name: lhs,
+						name: box lhs,
 						op,
 						value: box rhs,
 					}
 				}
+			);
+
+		let is = var()
+			.then(keyword(Keyword::Is))
+			.then(expr.clone()).map(
+			|((lhs, _), rhs)| Node::Compiled(format!("{lhs} === {rhs}"))
+		);
+
+		let isnt = var()
+			.then(keyword(Keyword::Isnt))
+			.then(expr.clone())
+			.map(
+				|((lhs, _), rhs)| Node::Compiled(format!("{lhs} !== {rhs}"))
 			);
 
 
@@ -251,16 +300,18 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			.map(|((_, condition), code)| {
 				Node::While {
 					condition: box condition,
-					code: code,
+					code,
 				}
 			});
 
 
 		let array_idx = var()
-			.then(token(Token::Colon).then(expr.clone()).repeated().at_least(1))
+			.then(token(Token::Colon).then(var()).repeated().at_least(1))
 			.map(|(value, idx)| {
 				let idx: Vec<String> = idx.into_iter().map(|(_, v)|
-					"[".to_owned() + &v.to_string() + "]"
+					"[".to_owned() +
+						&v.to_string() +
+						"]"
 				).collect();
 				Node::Compiled(format!("{value}{}", idx.join("")))
 			});
@@ -358,6 +409,19 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 			}
 		);
 
+		let or = var()
+			.then(
+				keyword(Keyword::Or)
+			)
+			.then(
+				expr.clone()
+			)
+			.map(
+				|((lhs, _), rhs)| {
+					Node::Compiled(format!("{lhs} || {rhs}"))
+				}
+			);
+
 		let r#else = keyword(Keyword::Else)
 			.then(block())
 			.map(|(_, code)| {
@@ -366,22 +430,85 @@ pub fn parser() -> impl Parser<Token, Vec<Node>, Error=Simple<Token>> {
 				}
 			});
 
+		let not = keyword(Keyword::Not)
+			.then(expr.clone())
+			.map(
+				|(_, rhs)| Node::Compiled(format!("!{rhs}"))
+			);
+
+		let class = keyword(Keyword::Class).then(ident()).then(block())
+			.map(|((_, name), code)| {
+				Node::Compiled(
+					format!("class {name} {{{}}}",
+							code.into_iter()
+								.map(|e|
+									match e {
+										Node::FunctionDecl {
+											name,
+											args,
+											body
+										} => {
+											format!("{name}({}) {{{}}}", args.join(","),
+													body
+														.into_iter()
+														.map(|e| e.to_string())
+														.collect::<Vec<String>>()
+														.join(";"))
+										}
+										e => e.to_string()
+									}
+								)
+								.collect::<Vec<String>>()
+								.join("\n")
+					)
+				)
+			});
+
+		let getter = keyword(Keyword::Get).then(ident()).then(block()).map(
+			|((_, name), block)| {
+				Node::Compiled(
+					format!("get {name}() {{{}}}", Node::Block(block))
+				)
+			}
+		);
+
+		let setter = keyword(Keyword::Get).then(ident()).then(ident()).then(block()).map(
+			|(((_, name), var), block)| {
+				Node::Compiled(
+					format!("set {name}({var}) {{{}}}", Node::Block(block))
+				)
+			}
+		);
+
+		let new = keyword(Keyword::New).then(expr.clone()).map(
+			|(_, exp)| Node::Compiled(format!("new {exp}"))
+		);
+
 		r#return
+			.or(class)
 			.or(r#let)
 			.or(assign)
+			.or(new)
+			.or(r#else)
+			.or(elif)
+			.or(r#if)
+			.or(r#while)
 			.or(math_eq)
 			.or(math)
+			.or(object)
 			.or(double_idx)
 			.or(array_idx)
 			.or(class_match())
 			.or(matchers())
 			.or(match_stmt)
-			.or(r#else)
-			.or(elif)
-			.or(r#if)
-			.or(r#while)
+			.or(is)
+			.or(isnt)
+			.or(or)
+			.or(not)
 			.or(anon_fun)
 			.or(fun)
+			.or(getter)
+			.or(setter)
 			.or(var())
 			.or(token(Token::AnonymousArrow).to(Node::AnonymousArrow))
 			.or(any().map(Node::Stray))

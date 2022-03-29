@@ -1,0 +1,11 @@
+class MyClass {
+    fun constructor(name) {
+        console.log("I am ready! My name is " name)
+    }
+}
+
+let my_class = new MyClass("Name!!")
+
+if my_class matches class MyClass {
+    console.log("It works!!!")
+}

@@ -1,6 +1,11 @@
-let value = "abc";
-if (new RegExp("[a-zA-Z0-9]+", "").test(value)) (() => {
-    console.log("It works!!")
-})(); else (() => {
-    console.log("It does not work :(")
+class MyClass {
+    constructor(name) {
+        console.log("I am ready! My name is ", name)
+    }
+}
+
+let my_class = new MyClass("Name!!")
+;
+if (my_class instanceof MyClass) (() => {
+    console.log("It works!!!")
 })();

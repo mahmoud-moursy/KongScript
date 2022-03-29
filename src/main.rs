@@ -24,6 +24,8 @@ fn main() -> io::Result<()> {
 
     let nodes = parser().parse(tokens).unwrap();
 
+    println!("{nodes:?}");
+
     let out = nodes.into_iter().map(|e| e.to_string()).collect::<Vec<String>>().join("");
 
     write("./out.js", out).unwrap();
