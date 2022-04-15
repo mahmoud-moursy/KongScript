@@ -11,17 +11,7 @@ pub enum Node {
     ObjIdx { object: Box<Node>, idx: Box<Node> },
     AnonFunc { args: Vec<String>, code: Box<Node> },
     FnCall(Box<Node>, Vec<Node>),
-    Add(Box<Node>, Box<Node>),
-    Sub(Box<Node>, Box<Node>),
-    Mul(Box<Node>, Box<Node>),
-    Div(Box<Node>, Box<Node>),
-    Mod(Box<Node>, Box<Node>),
-    Root(Box<Node>, Box<Node>),
-    Range(Box<Node>, Box<Node>),
-    Pow(Box<Node>, Box<Node>),
-    Xor(Box<Node>, Box<Node>),
-    Lt(Box<Node>, Box<Node>),
-    Gt(Box<Node>, Box<Node>),
+    Op(Math, Box<Node>, Box<Node>),
     Group(Vec<Node>),
     Block(Vec<Node>),
     Array(Vec<Node>),
@@ -70,33 +60,25 @@ impl Display for Node {
                     gr.into_iter()
                         .fold(String::new(), |acc, val| { acc + &format!("{val};") })
                 ),
-                Node::Add(lhs, rhs) => format!("{lhs}+{rhs}"),
-                Node::Sub(lhs, rhs) => format!("{lhs}-{rhs}"),
-                Node::Mul(lhs, rhs) => format!("{lhs}*{rhs}"),
-                Node::Div(lhs, rhs) => format!("{lhs}/{rhs}"),
-                Node::Mod(lhs, rhs) => format!("{lhs}%{rhs}"),
-                Node::Root(lhs, rhs) => format!("{rhs}**(1/{lhs})"),
-                Node::Range(lhs, rhs) => {
+                Node::Op(Math::Range, lhs, rhs) => {
                     if !matches!(lhs, box Node::Num(_)) || !matches!(rhs, box Node::Num(_)) {
                         format!("[...Array({rhs})].map(i => i + {lhs})")
                     } else {
                         let box Node::Num(lhs) = lhs else {
-													unreachable!()
-												};
+                                                    unreachable!()
+                                                };
                         let box Node::Num(rhs) = rhs else {
-													unreachable!()
-												};
+                                                    unreachable!()
+                                                };
                         format!("{:?}", (lhs..rhs))
                     }
                 }
-                Node::Lt(lhs, rhs) => format!("{lhs}<{rhs}"),
-                Node::Gt(lhs, rhs) => format!("{lhs}>{rhs}"),
-                Node::Pow(lhs, rhs) => format!("{lhs}**{rhs}"),
-                Node::Xor(lhs, rhs) => format!("{lhs}^{rhs}"),
+                Node::Op(Math::Root, lhs, rhs) => format!("{rhs}**(1/{lhs})"),
+                Node::Op(op, lhs, rhs) => format!("{lhs}{op}{rhs}"),
                 Node::AnonFunc { args, code } => {
                     format!("({}) => {}", args.join(","), code)
                 }
-                Node::FnCall(name, args) => format!("{name}{}", Node::Group(args.clone())),
+                Node::FnCall(name, args) => format!("{name}{}\n", Node::Group(args.clone())),
             }
         )
     }
@@ -109,13 +91,37 @@ macro_rules! combinator {
 }
 
 pub fn ident() -> combinator!(String) {
-    filter(|e| matches!(e, Token::Ident(_))).map(|e| {
-        if let Token::Ident(e) = e {
+    let simple_ident = || {
+        filter(|e| matches!(e, Token::Ident(_))).map(|e| {
+            let Token::Ident(e) = e else {
+                unreachable!()
+            };
+
             e
-        } else {
-            unreachable!()
-        }
-    })
+        })
+    };
+
+    simple_ident()
+        .then(
+            just(Token::DotAccessor)
+                .then(simple_ident())
+                .repeated()
+                .at_least(1)
+                .or_not(),
+        )
+        .map(|(mut name, fields)| {
+            if let Some(fields) = fields {
+                let fields = fields
+                    .into_iter()
+                    .map(|(_, n)| n)
+                    .collect::<Vec<String>>()
+                    .join(".");
+
+                name = format!("{name}.{fields}");
+            }
+
+            name
+        })
 }
 
 pub fn string() -> combinator!(String) {
@@ -297,8 +303,8 @@ pub fn parser() -> combinator!(Vec<Node>) {
 
         assign()
             .or(let_stmt)
-            .or(fun_call)
             .or(anon_fun)
+            .or(fun_call)
             .or(math)
             .or(array_idx())
             .or(ident().map(Node::Var))

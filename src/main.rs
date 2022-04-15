@@ -7,7 +7,10 @@ use std::env::args;
 use std::fs::read_to_string;
 use std::io;
 
-use crate::parser::{parser, Node};
+use crate::{
+    parser::{parser, Node},
+    tokenizer::Token,
+};
 use chumsky::Parser;
 
 use crate::tokenizer::tokenize;
@@ -23,17 +26,15 @@ fn main() -> io::Result<()> {
 
     let tokens = tokenize(file);
 
-    println!("{tokens:?}");
-
-    let mut nodes = parser()
+    let nodes = parser()
         .parse(tokens.clone())
         .map_err(|e| {
             for err in e {
                 println!(
-                    "{} at {:?} ({})",
+                    "{} at {:?} (near `{}`)",
                     match err.reason() {
                         SimpleReason::Unexpected => {
-                            "Unexpected token".to_string()
+                            format!("Unexpected node")
                         }
                         SimpleReason::Unclosed { delimiter, .. } => {
                             format!("Unclosed delimiter {delimiter}")
@@ -43,13 +44,20 @@ fn main() -> io::Result<()> {
                         }
                     },
                     err.span(),
-                    tokens[err.span().start - 1]
+                    tokens.get(err.span().start - 1).unwrap_or(&Token::Ident(
+                        "Failed to fetch source of error; my best advice is too look near the EOF!"
+                            .into()
+                    ))
                 );
             }
         })
         .unwrap();
 
-    println!("{}", nodes.remove(0));
+    let nodes = nodes.into_iter().map(|e| e.to_string());
+
+    let compiled = nodes.collect::<Vec<String>>().join("\n");
+
+    println!("{compiled}");
 
     Ok(())
 }

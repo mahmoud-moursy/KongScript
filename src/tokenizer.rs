@@ -150,23 +150,17 @@ pub enum Math {
     Lt,
     Xor,
     Range,
+    BitOr,
+    BitAnd,
+    BitFlip,
+    LBitShift,
+    RBitShift,
+    RZeroFillShift,
 }
 
 impl Math {
-    pub fn apply(&self, lhs: Node, rhs: Node) -> Node {
-        match self {
-            Math::Add => Node::Add(box lhs, box rhs),
-            Math::Sub => Node::Sub(box lhs, box rhs),
-            Math::Mul => Node::Mul(box lhs, box rhs),
-            Math::Div => Node::Div(box lhs, box rhs),
-            Math::Pow => Node::Pow(box lhs, box rhs),
-            Math::Mod => Node::Mod(box lhs, box rhs),
-            Math::Root => Node::Root(box lhs, box rhs),
-            Math::Gt => Node::Gt(box lhs, box rhs),
-            Math::Lt => Node::Lt(box lhs, box rhs),
-            Math::Xor => Node::Xor(box lhs, box rhs),
-            Math::Range => Node::Range(box lhs, box rhs),
-        }
+    pub fn apply(self, lhs: Node, rhs: Node) -> Node {
+        Node::Op(self, box lhs, box rhs)
     }
 }
 
@@ -205,6 +199,24 @@ impl Display for Math {
                 }
                 Math::Xor => {
                     "^"
+                }
+                Math::BitOr => {
+                    "|"
+                }
+                Math::BitAnd => {
+                    "&"
+                }
+                Math::BitFlip => {
+                    "~"
+                }
+                Math::LBitShift => {
+                    "<<"
+                }
+                Math::RBitShift => {
+                    ">>"
+                }
+                Math::RZeroFillShift => {
+                    ">>>"
                 }
                 Math::Range => {
                     panic!("Impossible for range!")
@@ -447,11 +459,32 @@ pub fn tokenize(file: String) -> Vec<Token> {
             // Xor
             '^' => final_out.push(Token::Math(Math::Xor)),
             // Gt
-            '>' => final_out.push(Token::Math(Math::Gt)),
+            '>' => {
+                if let Some('>') = file.peek() {
+                    file.next();
+                    if let Some('>') = file.peek() {
+                        file.next();
+                        final_out.push(Token::Math(Math::RZeroFillShift));
+                        continue;
+                    }
+                    final_out.push(Token::Math(Math::RBitShift));
+                    continue;
+                }
+                final_out.push(Token::Math(Math::Gt));
+            }
             // Lt
-            '<' => final_out.push(Token::Math(Math::Lt)),
+            '<' => {
+                if let Some('<') = file.peek() {
+                    file.next();
+                    final_out.push(Token::Math(Math::LBitShift));
+                    continue;
+                }
+                final_out.push(Token::Math(Math::Lt))
+            }
+            '\\' => final_out.push(Token::Math(Math::Root)),
+            '&' => final_out.push(Token::Math(Math::BitAnd)),
             // Root
-            '|' => final_out.push(Token::Math(Math::Root)),
+            '|' => final_out.push(Token::Math(Math::BitOr)),
             // Equals
             '=' => final_out.push(Token::Equals),
             // HACK: The implementation to check if a dot is part of a range
