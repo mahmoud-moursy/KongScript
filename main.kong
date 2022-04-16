@@ -1,5 +1,6 @@
-let value = (x y) -> x + 3 \ y
+fun hello() {
+    console.log("Test")
+    console.log("Test again")
+}
 
-let out = value(3 value(27 3))
-
-console.log(out)
+hello()

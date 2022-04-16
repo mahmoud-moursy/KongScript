@@ -9,7 +9,12 @@ pub enum Node {
     Assign { key: Box<Node>, value: Box<Node> },
     Let { key: Box<Node>, value: Box<Node> },
     ObjIdx { object: Box<Node>, idx: Box<Node> },
-    AnonFunc { args: Vec<String>, code: Box<Node> },
+    AnonFunc { args: Vec<Node>, code: Box<Node> },
+    FunDecl {
+        name: String,
+        args: Vec<Node>,
+        code: Vec<Node>
+    },
     FnCall(Box<Node>, Vec<Node>),
     Op(Math, Box<Node>, Box<Node>),
     Group(Vec<Node>),
@@ -35,7 +40,7 @@ impl Display for Node {
                 Node::ObjIdx { object, idx } => format!("{object}[{idx}]"),
                 Node::Bool(b) => format!("{b}"),
                 Node::Num(n) =>
-                    if n.to_i32().unwrap_or(std::i32::MAX) >= std::i32::MAX {
+                    if n.to_f32().unwrap_or(std::f32::MAX) == std::f32::MAX {
                         format!("{n}n")
                     } else {
                         format!("{n}")
@@ -76,9 +81,30 @@ impl Display for Node {
                 Node::Op(Math::Root, lhs, rhs) => format!("{rhs}**(1/{lhs})"),
                 Node::Op(op, lhs, rhs) => format!("{lhs}{op}{rhs}"),
                 Node::AnonFunc { args, code } => {
-                    format!("({}) => {}", args.join(","), code)
+                    format!("({}) => {}", 
+                        args.iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<String>>()
+                            .join(","), 
+                            code
+                        )
                 }
                 Node::FnCall(name, args) => format!("{name}{}\n", Node::Group(args.clone())),
+                Node::FunDecl { name, args, code } => {
+                    format!(
+                        "const {name} = ({}) => {{{}}}",
+                        args
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<String>>()
+                        .join(","),
+                        code
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<String>>()
+                        .join(";")
+                    )
+                }
             }
         )
     }
@@ -204,6 +230,13 @@ pub fn block() -> combinator!(Vec<Node>) {
     })
 }
 
+pub fn bool() -> combinator!(bool) {
+    filter_map(|span, b| match b {
+        Token::Bool(b) => Ok(b),
+        _ => Err(Simple::custom(span, format!("'{b}' is not a boolean")))
+    })
+}
+
 pub fn parser() -> combinator!(Vec<Node>) {
     recursive(|expr: Recursive<Token, Node, Simple<Token>>| {
         let array_idx = || {
@@ -278,17 +311,6 @@ pub fn parser() -> combinator!(Vec<Node>) {
             .then(just(Token::AnonymousArrow))
             .then(expr.clone())
             .map(|((args, _), code)| {
-                let args: Vec<String> = args
-                    .into_iter()
-                    .map(|e| {
-                        if let Node::Var(e) = e {
-                            e
-                        } else {
-                            panic!("Unexpected token in anonymous function declaration")
-                        }
-                    })
-                    .collect();
-
                 Node::AnonFunc {
                     args,
                     code: box code,
@@ -300,9 +322,24 @@ pub fn parser() -> combinator!(Vec<Node>) {
             .or(array_idx())
             .then(group())
             .map(|(name, args)| Node::FnCall(box name, args));
+        
+        let fun_decl = keyword(Keyword::Fun)
+            .then(ident())
+            .then(group())
+            .then(block())
+            .map(|(((_, name), args), code)| {
+                Node::FunDecl {
+                    name,
+                    args,
+                    code
+                }
+            });
+        
+        
 
         assign()
             .or(let_stmt)
+            .or(fun_decl)
             .or(anon_fun)
             .or(fun_call)
             .or(math)

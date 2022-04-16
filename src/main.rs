@@ -3,7 +3,7 @@
 #![feature(box_patterns)]
 
 use chumsky::error::SimpleReason;
-use std::env::args;
+use std::{env::args, fs::write};
 use std::fs::read_to_string;
 use std::io;
 
@@ -57,7 +57,7 @@ fn main() -> io::Result<()> {
 
     let compiled = nodes.collect::<Vec<String>>().join("\n");
 
-    println!("{compiled}");
+    write("./out.js", compiled).unwrap();
 
     Ok(())
 }
