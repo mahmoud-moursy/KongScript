@@ -340,7 +340,7 @@ pub fn tokenize(file: String) -> Vec<Token> {
                 None => panic!("Unexpected EOF"),
             },
             // Idents
-            'a'..='z' | 'A'..='Z' | '_' | '#' => {
+            'a'..='z' | 'A'..='Z' | '_' | '#' | '$' => {
                 let mut ident = String::from(char);
 
                 while let Some('a'..='z' | 'A'..='Z' | '_' | '0'..='9') = file.peek() {
@@ -485,6 +485,7 @@ pub fn tokenize(file: String) -> Vec<Token> {
             '&' => final_out.push(Token::Math(Math::BitAnd)),
             // Root
             '|' => final_out.push(Token::Math(Math::BitOr)),
+            '~' => final_out.push(Token::Math(Math::BitFlip)),
             // Equals
             '=' => final_out.push(Token::Equals),
             // HACK: The implementation to check if a dot is part of a range
@@ -537,7 +538,12 @@ pub fn tokenize(file: String) -> Vec<Token> {
             // Macro invocation
             '!' => final_out.push(Token::MacroInvocation),
             // Macro variables
-            '&' => final_out.push(Token::MacroVariable),
+            '$' => {
+                if let Some('!') = file.peek() {
+                    file.next();
+                    final_out.push(Token::MacroVariable);
+                }
+            },
             // Scopes/blocks, groups, and arrays
             bracket @ '[' | bracket @ '(' | bracket @ '{' => {
                 let brackets = match bracket {

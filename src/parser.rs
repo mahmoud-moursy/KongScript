@@ -1,19 +1,31 @@
-use std::fmt::{format, Debug, Display};
+use std::fmt::Display;
 
-use crate::tokenizer::{Keyword, Math, Token};
-use chumsky::prelude::*;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
+
+use crate::tokenizer::{Math, Token};
 
 #[derive(Debug, Clone)]
 pub enum Node {
-    Assign { key: Box<Node>, value: Box<Node> },
-    Let { key: Box<Node>, value: Box<Node> },
-    ObjIdx { object: Box<Node>, idx: Box<Node> },
-    AnonFunc { args: Vec<Node>, code: Box<Node> },
+    Assign {
+        key: Box<Node>,
+        value: Box<Node>,
+    },
+    Let {
+        key: Box<Node>,
+        value: Box<Node>,
+    },
+    ObjIdx {
+        object: Box<Node>,
+        idx: Box<Node>,
+    },
+    AnonFunc {
+        args: Vec<Node>,
+        code: Box<Node>,
+    },
     FunDecl {
         name: String,
         args: Vec<Node>,
-        code: Vec<Node>
+        code: Vec<Node>,
     },
     FnCall(Box<Node>, Vec<Node>),
     Op(Math, Box<Node>, Box<Node>),
@@ -81,28 +93,33 @@ impl Display for Node {
                 Node::Op(Math::Root, lhs, rhs) => format!("{rhs}**(1/{lhs})"),
                 Node::Op(op, lhs, rhs) => format!("{lhs}{op}{rhs}"),
                 Node::AnonFunc { args, code } => {
-                    format!("({}) => {}", 
+                    format!(
+                        "({}) => {}",
                         args.iter()
                             .map(ToString::to_string)
                             .collect::<Vec<String>>()
-                            .join(","), 
-                            code
-                        )
+                            .join(","),
+                        code
+                    )
                 }
-                Node::FnCall(name, args) => format!("{name}{}\n", Node::Group(args.clone())),
+                Node::FnCall(name, args) => format!(
+                    "{name}{}\n",
+                    args.iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<String>>()
+                        .join(",")
+                ),
                 Node::FunDecl { name, args, code } => {
                     format!(
                         "const {name} = ({}) => {{{}}}",
-                        args
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(","),
-                        code
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(";")
+                        args.iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<String>>()
+                            .join(","),
+                        code.iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<String>>()
+                            .join(";")
                     )
                 }
             }
@@ -110,247 +127,31 @@ impl Display for Node {
     }
 }
 
-macro_rules! combinator {
-	($ty: ty) => {
-		impl Parser<Token, $ty, Error=Simple<Token>>
-	}
-}
+pub fn parse(input: Vec<Token>) -> Vec<Node> {
 
-pub fn ident() -> combinator!(String) {
-    let simple_ident = || {
-        filter(|e| matches!(e, Token::Ident(_))).map(|e| {
-            let Token::Ident(e) = e else {
-                unreachable!()
-            };
+    let mut input = input.into_iter();
 
-            e
-        })
-    };
-
-    simple_ident()
-        .then(
-            just(Token::DotAccessor)
-                .then(simple_ident())
-                .repeated()
-                .at_least(1)
-                .or_not(),
-        )
-        .map(|(mut name, fields)| {
-            if let Some(fields) = fields {
-                let fields = fields
-                    .into_iter()
-                    .map(|(_, n)| n)
-                    .collect::<Vec<String>>()
-                    .join(".");
-
-                name = format!("{name}.{fields}");
-            }
-
-            name
-        })
-}
-
-pub fn string() -> combinator!(String) {
-    filter(|e| matches!(e, Token::Str(_))).map(|e| {
-        if let Token::Str(e) = e {
-            e
-        } else {
-            unreachable!()
+    while let Some(tok) = input.next() {
+        // There are no wildcard matches here to ensure that no case is missed
+        // and accidentally passed as an "unexpected token".
+        match tok {
+            Token::Keyword(_) => todo!(),
+            Token::Math(m) => panic!("Unexpected token: {m}"),
+            Token::Equals => panic!("Unexpected token: ="),
+            Token::DotAccessor => panic!("Unexpected token: ."),
+            Token::AnonymousArrow => panic!("Unexpected token: ->"),
+            Token::Colon => panic!("Unexpected token: :"),
+            Token::MacroInvocation => panic!("Unexpected token: !"),
+            Token::MacroVariable => panic!("Unexpected token: $!"),
+            Token::Ident(_) => todo!(),
+            Token::Str(_) => todo!(),
+            Token::Bool(_) => todo!(),
+            Token::Num(_) => todo!(),
+            Token::Group(_) => todo!(),
+            Token::Array(_) => todo!(),
+            Token::Block(_) => todo!(),
         }
-    })
-}
+    }
 
-pub fn num() -> combinator!(Decimal) {
-    filter(|e| matches!(e, Token::Num(_))).map(|e| {
-        if let Token::Num(e) = e {
-            e
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn keyword(kw: Keyword) -> combinator!(Keyword) {
-    filter(move |e| e == &Token::Keyword(kw)).map(|e| {
-        if let Token::Keyword(kw) = e {
-            kw
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn operator(m: Math) -> combinator!(Math) {
-    filter(move |e| &Token::Math(m) == e).map(|e| {
-        if let Token::Math(e) = e {
-            e
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn any_op() -> combinator!(Math) {
-    filter(|e| matches!(e, Token::Math(_))).map(|e| {
-        if let Token::Math(m) = e {
-            m
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn group() -> combinator!(Vec<Node>) {
-    filter(|e| matches!(e, Token::Group(_))).map(|e| {
-        if let Token::Group(e) = e {
-            parser().parse(e).unwrap()
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn array() -> combinator!(Vec<Node>) {
-    filter(|e| matches!(e, Token::Array(_))).map(|e| {
-        if let Token::Array(e) = e {
-            parser().parse(e).unwrap()
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn block() -> combinator!(Vec<Node>) {
-    filter(|e| matches!(e, Token::Block(_))).map(|e| {
-        if let Token::Block(e) = e {
-            parser().parse(e).unwrap()
-        } else {
-            unreachable!()
-        }
-    })
-}
-
-pub fn bool() -> combinator!(bool) {
-    filter_map(|span, b| match b {
-        Token::Bool(b) => Ok(b),
-        _ => Err(Simple::custom(span, format!("'{b}' is not a boolean")))
-    })
-}
-
-pub fn parser() -> combinator!(Vec<Node>) {
-    recursive(|expr: Recursive<Token, Node, Simple<Token>>| {
-        let array_idx = || {
-            ident()
-                .map(Node::Var)
-                .or(group().map(Node::Group))
-                .or(array().map(Node::Array))
-                .or(block().map(Node::Block))
-                .then(just(Token::Colon))
-                .then(
-                    expr.clone().then(
-                        just(Token::Colon)
-                            .repeated()
-                            .exactly(2)
-                            .ignored()
-                            .then(expr.clone())
-                            .repeated()
-                            .or_not(),
-                    ),
-                )
-                .map(|((value, _), (idx, idx_tree))| {
-                    let mut out: Node = Node::ObjIdx {
-                        object: box value,
-                        idx: box idx,
-                    };
-
-                    if let Some(idx_tree) = idx_tree {
-                        for (_, idx) in idx_tree {
-                            out = Node::ObjIdx {
-                                object: box out,
-                                idx: box idx,
-                            }
-                        }
-                    }
-
-                    out
-                })
-        };
-
-        let assign = || {
-            ident()
-                .map(Node::Var)
-                .or(array_idx())
-                .then(just(Token::Equals))
-                .then(expr.clone())
-                .map(|((key, _), value)| Node::Assign {
-                    key: box key,
-                    value: box value,
-                })
-        };
-
-        let let_stmt = keyword(Keyword::Let).then(assign()).map(|(_, assignment)| {
-            if let Node::Assign { key, value } = assignment {
-                Node::Let { key, value }
-            } else {
-                unreachable!()
-            }
-        });
-
-        let math = array_idx()
-            .or(ident().map(Node::Var))
-            .or(num().map(Node::Num))
-            .or(group().map(Node::Group))
-            .or(block().map(Node::Block))
-            .then(any_op())
-            .then(expr.clone())
-            .map(|((lhs, op), rhs)| op.apply(lhs, rhs));
-
-        let anon_fun = ident()
-            .map(|e| vec![Node::Var(e)])
-            .or(group())
-            .then(just(Token::AnonymousArrow))
-            .then(expr.clone())
-            .map(|((args, _), code)| {
-                Node::AnonFunc {
-                    args,
-                    code: box code,
-                }
-            });
-
-        let fun_call = ident()
-            .map(Node::Var)
-            .or(array_idx())
-            .then(group())
-            .map(|(name, args)| Node::FnCall(box name, args));
-        
-        let fun_decl = keyword(Keyword::Fun)
-            .then(ident())
-            .then(group())
-            .then(block())
-            .map(|(((_, name), args), code)| {
-                Node::FunDecl {
-                    name,
-                    args,
-                    code
-                }
-            });
-        
-        
-
-        assign()
-            .or(let_stmt)
-            .or(fun_decl)
-            .or(anon_fun)
-            .or(fun_call)
-            .or(math)
-            .or(array_idx())
-            .or(ident().map(Node::Var))
-            .or(string().map(Node::Str))
-            .or(block().map(Node::Block))
-            .or(group().map(Node::Group))
-            .or(array().map(Node::Array))
-            .or(num().map(Node::Num))
-    })
-    .repeated()
-    .then_ignore(end())
+    todo!()
 }
