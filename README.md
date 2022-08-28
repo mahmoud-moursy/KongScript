@@ -4,8 +4,6 @@
 
 - P.S: KongScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to
   run your output through Babel or a similar preprocessor!
-- Contributors: While I appreciate it, for the sake of your mental health and sanity, please avoid attempting to
-  contribute. Your mind will not make it out of the codebase in one piece. You can _try_. You will fail.
 
 ### You Should Know:
 
