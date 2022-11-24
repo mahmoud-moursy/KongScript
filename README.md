@@ -334,17 +334,3 @@ let my_num = 0;
 
 console.log(my_num);
 ```
-
-##### You can't have spaces in-between dots.
-
-This is valid JS:
-
-```js
-console.log("Hello world");
-```
-
-This is not valid KS:
-
-```js
-console . log("Hello world");
-```

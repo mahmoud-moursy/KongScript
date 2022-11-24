@@ -340,7 +340,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_eq(&mut self, chr: char) -> bool {
-        self.next_eq(chr)
+        self.input.next_if_eq(&chr).is_some()
     }
 
     fn next_or(&mut self) -> Result<char, Error> {
@@ -412,7 +412,7 @@ pub fn tokenize(file: String) -> Result<Vec<Token>, Error> {
             'a'..='z' | 'A'..='Z' | '_' | '#' | '$' => {
                 let mut ident = String::from(char);
 
-                while let Some(chr) = file.next_if(|x| matches!(x, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' | '.')) {
+                while let Some(chr) = file.next_if(|x| matches!(x, 'a'..='z' | 'A'..='Z' | '_' | '#' | '$') || x.is_alphanumeric()) {
                     ident.push(chr);
                 }
 
@@ -558,34 +558,27 @@ pub fn tokenize(file: String) -> Result<Vec<Token>, Error> {
             '~' => final_out.push(Token::Math(Math::BitFlip)),
             // Equals
             '=' => final_out.push(Token::Equals),
-            // HACK: The implementation to check if a dot is part of a range
-            // or a number is hacky.
             // Numbers
             '0'..='9' => {
                 let mut num = String::from(char);
 
-                while let Some(chr @ '0'..='9' | chr @ '.') = file.peek() {
-                    if *chr == '.' {
-                        let dot = file.next_or()?;
-                        match file.peek_or()? {
-                            '.' => {
-                                final_out.push(Token::Num(Decimal::from_str(&num)?));
-                                final_out.push(Token::Math(Math::Range));
-                                file.next();
-                                continue 'a;
-                            }
-                            '0'..='9' => {
-                                num.push(dot);
-                            }
-                            _ => {
-                                final_out.push(Token::Num(Decimal::from_str(&num)?));
-                                final_out.push(Token::Dot);
-                                continue 'a;
-                            }
-                        }
+                println!("{char} -> {}", file.peek_or()?);
+
+                while let Some(chr) = file.next_if(|x| matches!(x, '0'..='9' | '.')) {
+                    if chr == '.' && file.next_eq('.') {
+                        let num = Decimal::from_str(&num)?;
+
+                        final_out.push(Token::Num(num));
+
+                        final_out.push(Token::Math(Math::Range));
+
+                        continue 'a;
                     }
-                    num.push(file.next_or()?);
+
+                    num.push(chr)
                 }
+
+                println!("{num}");
 
                 final_out.push(Token::Num(Decimal::from_str(&num)?));
             }
