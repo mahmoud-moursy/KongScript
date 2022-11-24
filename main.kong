@@ -3,4 +3,6 @@ fun hello() {
     console.log("Test again")
 }
 
+(3.14159 3.14159)
+
 hello()

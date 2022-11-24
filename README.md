@@ -1,11 +1,11 @@
 # KongScript
 
-## A JavaScript preprocessor with fancier syntax.
+## A JavaScript preprocessor with fancier syntax
 
 - P.S: KongScript is not afraid to use modern JS features in its compiler for the sake of simplicity. You may want to
   run your output through Babel or a similar preprocessor!
 
-### You Should Know:
+### You Should Know
 
 - Everything is in the ***CONCEPT*** stage. Some features may be unimplemented!
 - The file extension is `.kong`
@@ -15,7 +15,7 @@
 - The code output is automatically minified; in examples where it *is* KongScript out, the code has been prettified for
   your enjoyment.
 
-### TODOs:
+### TODOs
 
 - `and` operator
 - Imports & Exports
@@ -27,9 +27,9 @@
 
 ### Syntactic sugar by example
 
-##### Practical equivalents
+#### Practical equivalents
 
-```
+```js
 // Hey, did you read the You Should Know section
 // of this page? You really should!
 
@@ -56,7 +56,7 @@ let add = (x, y) => x + y;
 
 ##### Cool pattern matching B)
 
-```
+```js
 let user_in = prompt("Give me a number!");
 
 let value = parseInt(user_in);
@@ -104,7 +104,7 @@ switch(true) {
 
 ##### Objects
 
-```
+```js
 // `obj` keyword is necessary for compiler to be able to differentiate scopes
 // from objects.
 let my_object = obj {
@@ -120,7 +120,7 @@ let my_object = {
 
 ##### Array ranges
 
-```
+```js
 // Array of 1 to 10.
 let array = 1..11;
 ```
@@ -132,11 +132,11 @@ let array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 ##### Array range indexing
 
-```
+```js
 let array = 1..21;
 
 // 10 through 20. Index with :
-let array_slice = array:9..21;
+let array_slice = array[9..21];
 
 console.log(array_slice)
 ```
@@ -157,7 +157,7 @@ console.log(array_slice);
 
 ##### Regex pattern matching
 
-```
+```js
 let regex = r"[A-Za-z0-9\-_]"gim
 
 let input = prompt("Input an alphanumeric value");
@@ -185,7 +185,7 @@ alert("Thank you :)");
 
 ##### Classes
 
-```
+```js
 class MyClass {
   // If there is no body, then the constructor
   // will expand to `this.param_name = param_name`
@@ -234,7 +234,7 @@ class MyClass {
 
 ##### Basic class pattern matching
 
-```
+```js
 class MyClass {
   constructor(value);
 }
@@ -246,7 +246,7 @@ class OtherClass {
 let cool_class = new OtherClass(30);
 
 // So far, this is as far as one can go
-// with pattern matching. This is a fancy
+// with pattern matching in classes... this is a fancy(?)
 // instanceof.
 if cool_class matches MyClass {
   console.log(cool_class.value)
@@ -280,14 +280,16 @@ if(cool_class instanceof MyClass) {
 ##### Type annotations (not enforced (yet?))
 
 ```ts
-// These are not enforced!
+// Types are Python-style in the sense that they are not enforced. :(
 // You can also do `let num: asdjhfiou9dsh = 30;` -- there
 // are no types built into the compiler.
 let num: int = 30;
 
 // An example of this not being
-// enforced. NEVER, EVER do this!!
+// enforced. NEVER, EVER do this!! PleasE! :(
 let str: str = 30;
+
+let thing: MyClass = new MyClass("Pentaflip Jones");
 
 // An example of this feature being
 // properly used. This is the _only_
@@ -301,7 +303,7 @@ let num = 30;
 let str = 30;
 ```
 
-###### List of official types:
+###### List of official types
 
 - Arrays: `[<your type/s here>]`
 - Strings: `str`
@@ -315,12 +317,13 @@ let str = 30;
 - Undefined: `undef`
 - Nullable: `<your type here>?`
 - Object: `obj`
+- Any class name
 
 ##### Primitive compile-time math evaluation
 
-Variables are not supported.
+Variables are not supported (yet?).
 
-```
+```js
 let my_num = 64 % 2;
 
 console.log(my_num);
@@ -330,4 +333,18 @@ console.log(my_num);
 let my_num = 0;
 
 console.log(my_num);
+```
+
+##### You can't have spaces in-between dots.
+
+This is valid JS:
+
+```js
+console.log("Hello world");
+```
+
+This is not valid KS:
+
+```js
+console . log("Hello world");
 ```
