@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use core::panic;
+use std::{fmt::Display, iter::Peekable, mem};
 
 use rust_decimal::{prelude::ToPrimitive, Decimal};
 
@@ -52,7 +53,7 @@ impl Display for Node {
                 Node::ObjIdx { object, idx } => format!("{object}[{idx}]"),
                 Node::Bool(b) => format!("{b}"),
                 Node::Num(n) =>
-                    if n.to_f32().unwrap_or(std::f32::MAX) == std::f32::MAX {
+                    if n.to_f32().unwrap_or(f32::MAX) == f32::MAX {
                         format!("{n}n")
                     } else {
                         format!("{n}")
@@ -128,30 +129,64 @@ impl Display for Node {
 }
 
 pub fn parse(input: Vec<Token>) -> Vec<Node> {
-
     let mut input = input.into_iter();
+
+    let mut final_out: Vec<Node> = Vec::new();
 
     while let Some(tok) = input.next() {
         // There are no wildcard matches here to ensure that no case is missed
         // and accidentally passed as an "unexpected token".
-        match tok {
-            Token::Keyword(_) => todo!(),
-            Token::Math(m) => panic!("Unexpected token: {m}"),
-            Token::Equals => panic!("Unexpected token: ="),
-            Token::DotAccessor => panic!("Unexpected token: ."),
-            Token::AnonymousArrow => panic!("Unexpected token: ->"),
-            Token::Colon => panic!("Unexpected token: :"),
-            Token::MacroInvocation => panic!("Unexpected token: !"),
-            Token::MacroVariable => panic!("Unexpected token: $!"),
-            Token::Ident(_) => todo!(),
-            Token::Str(_) => todo!(),
-            Token::Bool(_) => todo!(),
-            Token::Num(_) => todo!(),
-            Token::Group(_) => todo!(),
-            Token::Array(_) => todo!(),
-            Token::Block(_) => todo!(),
-        }
     }
 
-    todo!()
+    final_out
+}
+
+pub fn consume_one(input: &mut Peekable<impl Iterator<Item = Token>>) -> Result<Node, ()> {
+    let Some(tok) = input.next() else {
+        return Err(())
+    };
+
+    let tok = match tok {
+        Token::Keyword(_) => todo!(),
+        Token::Math(m) => panic!("Unexpected token: {m}"),
+        Token::Equals => panic!("Unexpected token: ="),
+        Token::DotAccessor => panic!("Unexpected token: ."),
+        Token::AnonymousArrow => panic!("Unexpected token: ->"),
+        Token::Colon => panic!("Unexpected token: :"),
+        Token::MacroInvocation => panic!("Unexpected token: !"),
+        Token::MacroVariable => panic!("Unexpected token: $!"),
+        Token::Ident(raw) if &raw == "r" => match input.peek() {
+            Some(_) => todo!(),
+            None => todo!(),
+        },
+        Token::Ident(ident) => match input.peek() {
+            Some(Token::Group(_)) => {
+                let Some(Token::Group(gr)) = input.next() else {
+                    unreachable!()
+                };
+                Node::FnCall(box Node::Var(ident), parse(gr))
+            }
+            Some(Token::Equals) => {
+                input.next();
+
+                let Ok(lhs) = consume_one(input) else {
+                    panic!("Unexpected input")
+                };
+
+                Node::Assign {
+                    key: box Node::Var(ident),
+                    value: box lhs,
+                }
+            }
+            _ => Node::Var(ident),
+        },
+        Token::Str(st) => Node::Str(st),
+        Token::Bool(b) => Node::Bool(b),
+        Token::Num(n) => Node::Num(n),
+        Token::Group(g) => Node::Group(parse(g)),
+        Token::Array(arr) => Node::Array(parse(arr)),
+        Token::Block(block) => Node::Block(parse(block)),
+    };
+
+    return Ok(tok);
 }

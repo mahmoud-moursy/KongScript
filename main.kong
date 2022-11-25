@@ -1,6 +1,1 @@
-fun hello() {
-    console.log("Test")
-    console.log("Test again")
-}
-
-hello()
+thing = thing
