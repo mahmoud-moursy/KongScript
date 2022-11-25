@@ -1,8 +1,10 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::str::FromStr;
+use std::iter::Peekable;
+use std::str::{FromStr, Chars};
 
 use rust_decimal::Decimal;
 
+use crate::errors::{Error, Type};
 use crate::parser::Node;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -23,8 +25,8 @@ pub enum Keyword {
     Import,
     Export,
     Include,
-    Is,
-    Isnt,
+    Eq,
+    Ineq,
     And,
     Or,
     Not,
@@ -36,15 +38,18 @@ pub enum Keyword {
     Return,
     Null,
     Undefined,
+    Raw
 }
 
-// JS equivalents of Kong keywords.
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
+                Keyword::Raw => {
+                    "raw#"
+                }
                 Keyword::Let => {
                     "let"
                 }
@@ -64,19 +69,19 @@ impl Display for Keyword {
                     "set"
                 }
                 Keyword::Obj => {
-                    ""
+                    "obj"
                 }
                 Keyword::Drop => {
-                    "delete"
+                    "drop"
                 }
                 Keyword::Throw => {
                     "throw"
                 }
                 Keyword::Match => {
-                    "switch"
+                    "match"
                 }
                 Keyword::Matches => {
-                    "=="
+                    "matches"
                 }
                 Keyword::New => {
                     "new"
@@ -90,20 +95,20 @@ impl Display for Keyword {
                 Keyword::Include => {
                     "include"
                 }
-                Keyword::Is => {
-                    "==="
+                Keyword::Eq => {
+                    "eq"
                 }
-                Keyword::Isnt => {
-                    "!=="
+                Keyword::Ineq => {
+                    "ineq"
                 }
                 Keyword::And => {
-                    "&&"
+                    "and"
                 }
                 Keyword::Or => {
-                    "||"
+                    "or"
                 }
                 Keyword::Not => {
-                    "!"
+                    "not"
                 }
                 Keyword::If => {
                     "if"
@@ -112,7 +117,7 @@ impl Display for Keyword {
                     "else"
                 }
                 Keyword::Elif => {
-                    "else if"
+                    "elif"
                 }
                 Keyword::For => {
                     "for"
@@ -189,7 +194,7 @@ impl Display for Math {
                     "%"
                 }
                 Math::Root => {
-                    panic!("Impossible for Sqrt!")
+                    "\\"
                 }
                 Math::Gt => {
                     ">"
@@ -219,69 +224,45 @@ impl Display for Math {
                     ">>>"
                 }
                 Math::Range => {
-                    panic!("Impossible for range!")
+                    ".."
                 }
             }
         )
     }
 }
 
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Token {
+    pub fn compile(&self) -> String {
         match self {
-            Token::Keyword(kw) => Display::fmt(kw, f),
-            Token::Math(m) => Display::fmt(m, f),
+            Token::Keyword(kw) => kw.to_string(),
+            Token::Math(m) => m.to_string(),
             Token::Equals => {
-                write!(f, "=")
+                "=".into()
             }
-            Token::DotAccessor => {
-                write!(f, ".")
+            Token::Dot => {
+                ".".into()
             }
             Token::AnonymousArrow => {
-                write!(f, "->")
+                "->".into()
             }
             Token::Colon => {
-                write!(f, ":")
+                ":".into()
             }
             Token::MacroInvocation => {
-                write!(f, "!")
+                "!".into()
             }
             Token::MacroVariable => {
-                write!(f, "$")
+                "$".into()
             }
-            Token::Ident(id) => Display::fmt(id, f),
-            Token::Str(str) => Debug::fmt(str, f),
-            Token::Bool(b) => Display::fmt(b, f),
-            Token::Num(n) => Display::fmt(n, f),
-            Token::Group(g) => {
-                write!(
-                    f,
-                    "{}",
+            Token::Ident(id) => id.into(),
+            Token::Str(str) => str.into(),
+            Token::Bool(b) => b.to_string(),
+            Token::Num(n) => n.to_string(),
+            Token::Group(g) | Token::Array(g) | Token::Block(g) => {
                     g.iter()
-                        .map(|e| e.to_string())
+                        .map(|e| e.compile())
                         .collect::<Vec<String>>()
-                        .join(","),
-                )
-            }
-            Token::Array(g) => {
-                write!(
-                    f,
-                    "{}",
-                    g.iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(","),
-                )
-            }
-            Token::Block(g) => {
-                write!(
-                    f,
-                    "{}",
-                    g.iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(";"),
-                )
+                        .join(",")
             }
         }
     }
@@ -304,7 +285,7 @@ pub enum Token {
     Keyword(Keyword),
     Math(Math),
     Equals,
-    DotAccessor,
+    Dot,
     AnonymousArrow,
     Colon,
     MacroInvocation,
@@ -318,9 +299,97 @@ pub enum Token {
     Block(Vec<Token>),
 }
 
-pub fn tokenize(file: String) -> Vec<Token> {
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Keyword(keyword) => write!(f, "{keyword}"),
+            Token::Math(operator) => write!(f, "{operator}"),
+            Token::Equals => write!(f, "="),
+            Token::Dot => write!(f, "."),
+            Token::AnonymousArrow => write!(f, "->"),
+            Token::Colon => write!(f, ":"),
+            Token::MacroInvocation => write!(f, "!"),
+            Token::MacroVariable => write!(f, "@"),
+            Token::Ident(ident) => write!(f, "{ident}"),
+            // Debug display of String encloses it in quotes and escapes other quotes.
+            Token::Str(string) => write!(f, "{string:?}"),
+            Token::Bool(boolean) => write!(f, "{boolean}"),
+            Token::Num(num) => write!(f, "{num}"),
+            Token::Group(group) => write!(f, "( {} )", group.into_iter().map(|x| x.to_string()).collect::<Vec<String>>().join(",")),
+            Token::Array(array) => write!(f, "[ {} ]", array.into_iter().map(|x| x.to_string()).collect::<Vec<String>>().join(",")),
+            Token::Block(block) => write!(f, "{{\n\t{}\n}}", block.into_iter().map(|x| x.to_string()).collect::<Vec<String>>().join("\n\t")),
+        }
+    }
+}
+
+pub struct Tokenizer<'a> {
+    input: Peekable<Chars<'a>>,
+}
+
+impl Iterator for Tokenizer<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.input.next()
+    }
+}
+
+impl<'a> Tokenizer<'a> {
+    fn next_if(&mut self, func: impl FnOnce(&char) -> bool) -> Option<char> {
+        self.input.next_if(func)
+    }
+
+    fn next_eq(&mut self, chr: char) -> bool {
+        self.input.next_if_eq(&chr).is_some()
+    }
+
+    fn next_or(&mut self) -> Result<char, Error> {
+        match self.input.peek() {
+            Some(_) => Ok(self.next().unwrap()),
+            None => Err(Error::UnexpectedEOF)
+        }
+    }
+
+    fn peek_or(&mut self) -> Result<&char, Error> {
+        match self.input.peek() {
+            Some(chr_ref) => Ok(chr_ref),
+            None => Err(Error::UnexpectedEOF)
+        }
+    }
+
+    fn peek(&mut self) -> Option<&char> {
+        return self.input.peek()
+    }
+
+    fn eof(&mut self) -> bool {
+        self.input.peek().is_some()
+    }
+
+    fn new(input: Chars<'a>) -> Self {
+        Tokenizer {
+            input: input.peekable(),
+        }
+    }
+
+    /// A take method that does not consume the entire iterator.
+    fn take(&mut self, n: usize) -> Result<String, Error> {
+        let mut output = String::new();
+
+        for _ in 0..n {
+            let Some(character) = self.next() else {
+                return Err(Error::UnexpectedEOF)
+            };
+
+            output.push(character);
+        }
+
+        Ok(output)
+    }
+}
+
+pub fn tokenize(file: String) -> Result<Vec<Token>, Error> {
     // File turned into an iterator for ease of use later on
-    let mut file = file.chars().peekable();
+    let mut file = Tokenizer::new(file.chars());
 
     // What is returned at the end
     let mut final_out = vec![];
@@ -332,19 +401,19 @@ pub fn tokenize(file: String) -> Vec<Token> {
                 Some('*') => {
                     while Some('*') != file.next()
                         && Some('/') != file.next()
-                        && None != file.next()
+                        && !file.eof()
                     {}
                 }
                 Some('/') => while Some('\n') != file.next() && None != file.next() {},
                 Some(_) => final_out.push(Token::Math(Math::Div)),
-                None => panic!("Unexpected EOF"),
+                None => return Err(Error::UnexpectedEOF),
             },
             // Idents
             'a'..='z' | 'A'..='Z' | '_' | '#' | '$' => {
                 let mut ident = String::from(char);
 
-                while let Some('a'..='z' | 'A'..='Z' | '_' | '0'..='9') = file.peek() {
-                    ident.push(file.next().unwrap());
+                while let Some(chr) = file.next_if(|x| matches!(x, 'a'..='z' | 'A'..='Z' | '_' | '#' | '$') || x.is_alphanumeric()) {
+                    ident.push(chr);
                 }
 
                 // Matches potential keywords.
@@ -364,8 +433,8 @@ pub fn tokenize(file: String) -> Vec<Token> {
                     "import" => Token::Keyword(Keyword::Import),
                     "export" => Token::Keyword(Keyword::Export),
                     "include" => Token::Keyword(Keyword::Include),
-                    "is" => Token::Keyword(Keyword::Is),
-                    "isnt" => Token::Keyword(Keyword::Isnt),
+                    "is" => Token::Keyword(Keyword::Eq),
+                    "isnt" => Token::Keyword(Keyword::Ineq),
                     "not" => Token::Keyword(Keyword::Not),
                     "and" => Token::Keyword(Keyword::And),
                     "or" => Token::Keyword(Keyword::Or),
@@ -379,6 +448,7 @@ pub fn tokenize(file: String) -> Vec<Token> {
                     "undefined" => Token::Keyword(Keyword::Undefined),
                     "true" => Token::Bool(true),
                     "false" => Token::Bool(false),
+                    "raw#" => Token::Keyword(Keyword::Raw),
                     _ => Token::Ident(ident),
                 };
 
@@ -393,34 +463,34 @@ pub fn tokenize(file: String) -> Vec<Token> {
                         break;
                     }
                     if char == '\\' {
-                        match file.next().unwrap() {
+                        match file.next_or()? {
                             'n' => string.push('\n'),
                             'r' => string.push('\r'),
                             't' => string.push('\t'),
                             '0' => string.push('\0'),
                             'u' => {
                                 let hexcode = String::from_iter([
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
                                 ]);
 
-                                let num = u8::from_str_radix(&hexcode, 16).unwrap();
+                                let num = u8::from_str_radix(&hexcode, 16)?;
 
                                 string.push(num as char);
                             }
                             'x' => {
                                 let hexcode = String::from_iter([
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
-                                    file.next().unwrap(),
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
+                                    file.next_or()?,
                                 ]);
 
-                                let num = u8::from_str_radix(&hexcode, 16).unwrap();
+                                let num = u8::from_str_radix(&hexcode, 16)?;
 
                                 string.push(num as char);
                             }
@@ -488,61 +558,46 @@ pub fn tokenize(file: String) -> Vec<Token> {
             '~' => final_out.push(Token::Math(Math::BitFlip)),
             // Equals
             '=' => final_out.push(Token::Equals),
-            // HACK: The implementation to check if a dot is part of a range
-            // or a number is hacky.
             // Numbers
             '0'..='9' => {
                 let mut num = String::from(char);
 
-                while let Some(chr @ '0'..='9' | chr @ '.') = file.peek() {
-                    if *chr == '.' {
-                        let dot = file.next().unwrap();
-                        match file.peek().unwrap() {
-                            '.' => {
-                                final_out.push(Token::Num(Decimal::from_str(&num).unwrap()));
-                                final_out.push(Token::Math(Math::Range));
-                                file.next();
-                                continue 'a;
-                            }
-                            '0'..='9' => {
-                                num.push(dot);
-                            }
-                            _ => {
-                                final_out.push(Token::Num(Decimal::from_str(&num).unwrap()));
-                                final_out.push(Token::DotAccessor);
-                                continue 'a;
-                            }
-                        }
+                println!("{char} -> {}", file.peek_or()?);
+
+                while let Some(chr) = file.next_if(|x| matches!(x, '0'..='9' | '.')) {
+                    if chr == '.' && file.next_eq('.') {
+                        let num = Decimal::from_str(&num)?;
+
+                        final_out.push(Token::Num(num));
+
+                        final_out.push(Token::Math(Math::Range));
+
+                        continue 'a;
                     }
-                    num.push(file.next().unwrap());
+
+                    num.push(chr)
                 }
 
-                final_out.push(Token::Num(Decimal::from_str(&num).unwrap()));
-            }
-            // "this.", compacted to @
-            '@' => {
-                final_out.push(Token::Ident("this".into()));
-                final_out.push(Token::DotAccessor);
+                println!("{num}");
+
+                final_out.push(Token::Num(Decimal::from_str(&num)?));
             }
             // Ranges or field accessors
             '.' => {
-                if let Some('.') = file.peek() {
+                if file.next_eq('.') {
                     file.next();
                     final_out.push(Token::Math(Math::Range))
                 } else {
-                    final_out.push(Token::DotAccessor);
+                    final_out.push(Token::Dot);
                 }
             }
-            // Colon (for indexing)
+            // Colon
             ':' => final_out.push(Token::Colon),
-            // Macro invocation
+            // Macro invocation (e.g macro!)
             '!' => final_out.push(Token::MacroInvocation),
-            // Macro variables
-            '$' => {
-                if let Some('!') = file.peek() {
-                    file.next();
-                    final_out.push(Token::MacroVariable);
-                }
+            // Macro variables (e.g @ident)
+            '@' => {
+                final_out.push(Token::MacroVariable)
             },
             // Scopes/blocks, groups, and arrays
             bracket @ '[' | bracket @ '(' | bracket @ '{' => {
@@ -560,15 +615,15 @@ pub fn tokenize(file: String) -> Vec<Token> {
                 let mut in_string = false;
 
                 while bracket_count != 0 {
-                    let char = file.next().unwrap();
-
-                    if char == '"' || char == '\'' {
-                        in_string = !in_string;
-                    }
+                    let char = file.next_or()?;
 
                     if char == '\\' && in_string {
                         src.push(char);
-                        src.push(file.next().unwrap());
+                        src.push(file.next_or()?);
+                    }
+
+                    if char == '"' || char == '\'' {
+                        in_string = !in_string;
                     }
 
                     if char == brackets[1] {
@@ -595,18 +650,18 @@ pub fn tokenize(file: String) -> Vec<Token> {
                 }
 
                 final_out.push(match brackets {
-                    BlockType::Array => Token::Array(tokenize(src)),
-                    BlockType::Block => Token::Block(tokenize(src)),
-                    BlockType::Group => Token::Group(tokenize(src)),
+                    BlockType::Array => Token::Array(tokenize(src)?),
+                    BlockType::Block => Token::Block(tokenize(src)?),
+                    BlockType::Group => Token::Group(tokenize(src)?),
                     [_, _] => unreachable!(),
                 });
             }
             // Ignore whitespace
             chr if chr.is_whitespace() => {}
-            // Panic for unexpected characters
-            _ => panic!("Unexpected char {char}! {final_out:?}"),
+            // Unexpected characters
+            chr => return Err(Error::Unexpected(Type::Char(chr))),
         }
     }
 
-    final_out
+    Ok(final_out)
 }

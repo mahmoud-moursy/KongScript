@@ -1,35 +1,35 @@
-#![feature(let_else)]
-#![feature(box_syntax)]
-#![feature(box_patterns)]
+#![feature(box_syntax, box_patterns)]
 
-use chumsky::error::SimpleReason;
-use std::{env::args, fs::write};
+// use chumsky::error::SimpleReason;
 use std::fs::read_to_string;
-use std::io;
+use std::{env::args, fs::write};
 
-use crate::{
-    parser::{parse, Node},
-    tokenizer::Token,
-};
-use chumsky::Parser;
+use parser::parse;
 
-use crate::tokenizer::tokenize;
+use crate::{errors::Error, tokenizer::tokenize, tokenizer::Token};
 
+mod errors;
 mod parser;
 mod tokenizer;
 
-fn main() -> io::Result<()> {
-    let file_name = args().nth(1).unwrap();
+fn main() -> Result<(), Error> {
+    let file_name = args().nth(1).unwrap_or("./main.kong".into());
 
     let file = read_to_string(file_name)?;
 
-    let tokens = tokenize(file);
+    let tokens = tokenize(file)?;
 
-    let nodes = parse(tokens.clone());
+    #[cfg(debug_assertions)]
+    println!("{tokens:?}");
 
-    let nodes = nodes.into_iter().map(|e| e.to_string());
+    let nodes = parse(tokens);
 
-    let compiled = nodes.collect::<Vec<String>>().join("\n");
+    let nodes: Vec<String> = nodes.into_iter().map(|e| e.compile()).collect();
+
+    #[cfg(debug_assertions)]
+    println!("{nodes:?}");
+
+    let compiled = nodes.join("\n");
 
     write("./out.js", compiled).unwrap();
 
