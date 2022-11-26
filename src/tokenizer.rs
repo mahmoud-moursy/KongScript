@@ -25,10 +25,17 @@ pub enum Keyword {
     Import,
     Export,
     Include,
+    // ===
     Eq,
+    // !==
     Ineq,
+    // ==
+    Is,
+    // &&
     And,
+    // ||
     Or,
+    // !
     Not,
     If,
     Else,
@@ -433,8 +440,9 @@ pub fn tokenize(file: String) -> Result<Vec<Token>, Error> {
                     "import" => Token::Keyword(Keyword::Import),
                     "export" => Token::Keyword(Keyword::Export),
                     "include" => Token::Keyword(Keyword::Include),
-                    "is" => Token::Keyword(Keyword::Eq),
-                    "isnt" => Token::Keyword(Keyword::Ineq),
+                    "eq" => Token::Keyword(Keyword::Eq),
+                    "ineq" => Token::Keyword(Keyword::Ineq),
+                    "is" => Token::Keyword(Keyword::Is),
                     "not" => Token::Keyword(Keyword::Not),
                     "and" => Token::Keyword(Keyword::And),
                     "or" => Token::Keyword(Keyword::Or),

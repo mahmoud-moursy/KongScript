@@ -125,7 +125,8 @@ impl Node {
 }
 
 pub struct Parser {
-    input: Vec<Node>,
+    input: Vec<Token>,
+    last: Option<Token>
 }
 
 pub fn parse(tokens: Vec<Token>) -> Result<Vec<Node>, Error> {
